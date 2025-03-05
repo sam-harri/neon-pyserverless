@@ -10,9 +10,6 @@ jobs:
   test:
     name: Run pytests with uv
     runs-on: ubuntu-latest
-    env:
-      UV_PROJECT_ENVIRONMENT: /usr/local # so that uv doesnt create a venv
-    
 
     steps:
       - uses: actions/checkout@v4
