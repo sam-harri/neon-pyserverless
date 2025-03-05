@@ -10,7 +10,7 @@ Either pass in a connection string
 ```python
 from pyserverless import Neon
 
-neon = Neon()
+neon = Neon("postgresql://neondb_owner:password@host/neondb?sslmode=require")
 ```
 
 or if the `DATABASE_URL` environment variable is set:
