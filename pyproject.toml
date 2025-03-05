@@ -1,0 +1,56 @@
+[project]
+name = "pyserverless"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "psycopg>=3.2.5",
+    "python-dotenv>=1.0.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.3.5",
+    "ruff>=0.9.9",
+]
+
+
+[tool.ruff]
+fix = true
+line-length = 120
+
+[tool.ruff.lint]
+extend-select = ["I"]
+select = ["ALL"]
+ignore = [
+    "COM812", # can cause conflicts with formatter (ruff says so)
+    "D107", # no docstrings for inits
+    "ANN401", # generic types are fine
+    "D203", # conflicts with D211
+    "D212" # conflicts with D213
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pyserverless"]
+combine-as-imports = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+pythonpath = [
+    "src",
+]
+testpaths = [
+    "tests",
+]
+addopts = "-ra -v"
