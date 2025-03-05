@@ -116,11 +116,11 @@ class HTTPQueryOptions:
     full_results: bool = False
     fetch_options: dict[str, Any] = field(default_factory=dict)
     auth_token: Callable[[], str] | None = None
-    query_callback: Callable[[ParameterizedQuery], None] = None
+    query_callback: Callable[[ParameterizedQuery], None] | None = None
     result_callback: Callable[
         [ParameterizedQuery, FullQueryResults, bool, bool],
         None,
-    ] = None
+    ] | None = None
 
 
 @dataclass(frozen=True)
@@ -161,7 +161,7 @@ class NeonTransactionOptions(HTTPQueryOptions):
         deferable_requirements = self.isolation_level == IsolationLevel.SERIALIZABLE and self.read_only
         if self.deferrable and not deferable_requirements:
             raise TransactionConfigurationError(
-                self.isolation_level,
+                self.isolation_level.value,
                 self.read_only,
                 self.deferrable,
             )

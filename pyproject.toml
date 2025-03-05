@@ -16,6 +16,7 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 dev-dependencies = [
+    "pyright>=1.1.396",
     "pytest>=8.3.5",
     "ruff>=0.9.9",
 ]
@@ -54,3 +55,7 @@ testpaths = [
     "tests",
 ]
 addopts = "-ra -v"
+
+
+[tool.pyright]
+include = ["src"]

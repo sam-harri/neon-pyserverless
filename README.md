@@ -106,7 +106,7 @@ A cleaner and more supported way to do this will be added in the future.
   - `ConnectionStringMissingError`: If no connection string is provided and `DATABASE_URL` is not set.
   - `ConnectionStringFormattingError`: If the provided connection string is not correctly formatted.
 
-### `query(query: str, params: tuple[Any, ...] | None = (), opts: HTTPQueryOptions | None = None) -> FullQueryResults | QueryRows`
+### `query(query: str, params: tuple[Any, ...] = (), opts: HTTPQueryOptions | None = None) -> FullQueryResults | QueryRows`
 
 - **Parameters:**
   - `query`: The SQL query string with placeholders (`$1`, `$2`, etc.).

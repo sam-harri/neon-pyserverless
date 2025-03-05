@@ -65,23 +65,22 @@ class Neon:
 
     def __init__(self, connection_string: str | None = None) -> None:
         if connection_string is None:
-            if os.getenv("DATABASE_URL") is None:
-                raise ConnectionStringMissingError
             connection_string = os.getenv("DATABASE_URL")
+        if connection_string is None:
+            raise ConnectionStringMissingError
 
         try:
             protocol, netloc, path, _, _, _ = urlparse(connection_string)
             username, rest = netloc.split(":")
-            _, hostname = rest.split("@")
+            hostname = rest.split("@")[1]
             pathname = path.lstrip("/")
         except ValueError:
             raise ConnectionStringFormattingError(connection_string) from None
 
         if protocol not in ["postgresql", "postgres"] or not username or not hostname or not pathname:
             raise ConnectionStringFormattingError(connection_string)
-
-        self.connection_string = connection_string
         self.url = f"https://{hostname}/sql"
+        self.connection_string = connection_string
         register_default_types(types)
         self.transformer = Transformer()
         register_default_adapters(self.transformer)
@@ -89,7 +88,7 @@ class Neon:
     def query(
         self,
         query: str,
-        params: tuple[Any, ...] | None = (),
+        params: tuple[Any, ...] = (),
         opts: HTTPQueryOptions | None = None,
     ) -> FullQueryResults | QueryRows:
         """
@@ -99,7 +98,7 @@ class Neon:
         ----------
         query : str
             The SQL query to execute. using $1, $2, etc. for parameters.
-        params : tuple[Any, ...] | None, optional
+        params : tuple[Any, ...], optional
             Tuple of parameters to substitute into the query.
         opts : HTTPQueryOptions | None, optional
             Optional query options.
