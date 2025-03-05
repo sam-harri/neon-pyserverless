@@ -117,10 +117,13 @@ class HTTPQueryOptions:
     fetch_options: dict[str, Any] = field(default_factory=dict)
     auth_token: Callable[[], str] | None = None
     query_callback: Callable[[ParameterizedQuery], None] | None = None
-    result_callback: Callable[
-        [ParameterizedQuery, FullQueryResults, bool, bool],
-        None,
-    ] | None = None
+    result_callback: (
+        Callable[
+            [ParameterizedQuery, FullQueryResults, bool, bool],
+            None,
+        ]
+        | None
+    ) = None
 
 
 @dataclass(frozen=True)
