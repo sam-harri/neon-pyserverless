@@ -38,32 +38,73 @@ psycopg_datetime._get_intervalstyle = lambda _: b"postgres"  # noqa: SLF001
 
 class Neon:
     """
-    Client for executing queries against a Neon database over HTTP.
-
-    This client provides methods to execute SQL queries and transactions
-    against a Neon database using their HTTP API.
-
-    Parameters
-    ----------
-    connection_string : str, optional
-        A PostgreSQL connection string in the format
-        `postgresql://user:pass@hostname/dbname`. If not provided,
-        will look for DATABASE_URL environment variable.
-
-    Raises
-    ------
-    ConnectionStringMissingError
-        If no connection string is provided and DATABASE_URL environment variable is not found.
-    ConnectionStringFormattingError
-        If the connection string is not in the correct format.
+    Sync client for executing queries against a Neon database over HTTP.
 
     Examples
     --------
+    Creating a client instance using an explicit connection string:
+
     >>> neon = Neon("postgresql://user:pass@hostname/dbname")
+
+    ### Executing a simple query: ###
+
     >>> results = neon.query("SELECT * FROM users")
-    >>> # Or if the DATABASE_URL environment variable is set:
+    >>> for row in results:
+    ...     print(row)
+
+    Creating a client instance using the DATABASE_URL environment variable:
+
     >>> neon = Neon()
-    >>> results = neon.query("SELECT * FROM users")
+    >>> results = neon.query("SELECT COUNT(*) FROM users")
+    >>> print(results[0]["count"])  # Prints the total number of users
+
+    ### Using Parameterized Queries ###
+
+    Parameterized queries prevent SQL injection by using placeholders:
+
+    >>> user_id = 42
+    >>> user_data = neon.query("SELECT * FROM users WHERE id = $1", (user_id,))
+    >>> print(user_data)
+
+    Inserting new data with parameters:
+
+    >>> neon.query(
+    ...     "INSERT INTO users (name, email) VALUES ($1, $2)",
+    ...     ("Alice", "alice@example.com"),
+    ... )
+
+    ### Executing Multiple Queries in a Transaction ###
+
+    Transactions allow executing multiple queries atomically:
+
+    >>> transaction_results = neon.transaction([
+    ...     ("INSERT INTO orders (user_id, total) VALUES ($1, $2)", (42, 99.99)),
+    ...     ("UPDATE users SET last_order = NOW() WHERE id = $1", (42,)),
+    ...     "SELECT * FROM users WHERE id = 42"
+    ... ])
+
+    >>> print(transaction_results[2])  # Prints the user data after the update
+
+    ### Customizing Query Execution with Options ###
+
+    Using `HTTPQueryOptions` to retrieve full query metadata:
+
+    >>> from pyserverless.models import HTTPQueryOptions
+    >>> options = HTTPQueryOptions(full_results=True)
+    >>> results = neon.query("SELECT * FROM users LIMIT 5", query_options=options)
+    >>> print(results.fields)  # Print column metadata
+
+    or when using transactions:
+
+    >>> options = NeonTransactionOptions(
+    ...     read_only=True,
+    ...     isolation_level=IsolationLevel.SERIALIZABLE,
+    ...     deferrable=True,
+    ... )
+    >>> results = neon.transaction([
+    ...     ("SELECT * FROM users LIMIT 5", ()),
+    ...     ("SELECT * FROM orders LIMIT 5 WHERE user_id = $1", (42,)),
+    ... ], transaction_options=options)
 
     """
 
@@ -103,11 +144,11 @@ class Neon:
         Parameters
         ----------
         query : str
-            The SQL query to execute. using $1, $2, etc. for parameters.
+            The SQL query to execute, using $1, $2, etc., for parameters.
         params : tuple[Any, ...] | None, optional
             Tuple of parameters to substitute into the query.
         query_options : HTTPQueryOptions | None, optional
-            Optional query options.
+            Query options.
 
         Returns
         -------
@@ -210,17 +251,17 @@ class Neon:
 
         Parameters
         ----------
-        queries : list[tuple[str, tuple[Any, ...] | None] | str]
+        queries : list[tuple[str, tuple[Any, ...]] | str]
             A list of queries to execute in sequence. Each element can either be:
-            - A tuple (query, params), where params is a tuple of values (or None) to substitute
+            - A tuple (query, params), where params is a tuple of values to substitute
                 into the query.
             - A plain query string (equivalent to (query, ())), if no parameters are needed.
         transaction_options : NeonTransactionOptions, optional
-            Options for the transaction. If not provided, a new NeonTransactionOptions instance is used.
+            transaction options.
 
         Returns
         -------
-        list[FullQueryResults] or list[QueryRows]
+        list[FullQueryResults] | list[QueryRows]
             A list of results, one for each query. If the `full_results` flag in the options is True,
             each result is a FullQueryResults object; otherwise, it is a list of query rows.
 
@@ -249,7 +290,7 @@ class Neon:
         """
         transaction_options = transaction_options or NeonTransactionOptions()
 
-        # Unparameterized queries are wrapped as (query, ()).
+        # Unparameterized queries are strings, so wrap them as (query, ()).
         queries = [(item, ()) if isinstance(item, str) else item for item in queries]
 
         processed_queries = [

@@ -51,7 +51,7 @@ Without any options:
 results = neon.transaction(
     [
         ("INSERT INTO users (name) VALUES ($1)", ("John",)),
-        ("SELECT * FROM users", ()),
+        ("SELECT * FROM users"),
     ],
 )
 ```
@@ -61,7 +61,7 @@ With options:
 results = neon.transaction(
     [
         ("SELECT questions, answers FROM questions_and_answers WHERE topic = $1", ("SQL",)),
-        ("SELECT topic, COUNT(*) FROM questions_and_answers GROUP BY topic", ()),
+        ("SELECT topic, COUNT(*) FROM questions_and_answers GROUP BY topic"),
     ],
     NeonTransactionOptions(
         isolation_level=IsolationLevel.SERIALIZABLE,
@@ -106,33 +106,32 @@ A cleaner and more supported way to do this will be added in the future.
   - `ConnectionStringMissingError`: If no connection string is provided and `DATABASE_URL` is not set.
   - `ConnectionStringFormattingError`: If the provided connection string is not correctly formatted.
 
-### `query(query: str, params: tuple[Any, ...] = (), opts: HTTPQueryOptions = HTTPQueryOptions()) -> FullQueryResults | QueryRows`
+### `query(query: str, params: tuple[Any, ...] = None, query_options: HTTPQueryOptions = None) -> FullQueryResults | QueryRows`
 
 - **Parameters:**
   - `query`: The SQL query string with placeholders (`$1`, `$2`, etc.).
   - `params`: A tuple of parameters to bind to the query.
-  - `query_options`: Optional `HTTPQueryOptions` to control behavior such as full results, array mode, or timeouts.
+  - `query_options`: Optional `HTTPQueryOptions` to control behavior such as full results, array mode, or request options.
 - **Returns:**
   - Either a `FullQueryResults` object (if `full_results=True`) or a list of rows.
 - **Raises:**
   - `NeonHTTPResponseError`: If the HTTP request fails.
   - `InvalidAuthTokenError`: If the auth token callback returns an invalid value.
-  - `PostgresAdaptationError` if a parameter cannot be adapted to a PostgreSQL type.
-  - `PythonAdaptationError` if a PostgreSQL value cannot be converted to a Python type.
+  - `PostgresAdaptationError`: If a parameter cannot be adapted to a PostgreSQL type.
+  - `PythonAdaptationError`: If a PostgreSQL value cannot be converted to a Python type.
 
-### `transaction(queries: list[tuple[str, tuple[Any, ...]]], transaction_options: NeonTransactionOptions = NeonTransactionOptions()) -> list[FullQueryResults] | list[QueryRows]`
+### `transaction(queries: list[tuple[str, tuple[Any, ...]] | str], transaction_options: NeonTransactionOptions = None) -> list[FullQueryResults] | list[QueryRows]`
 
 - **Parameters:**
-  - `queries`: A list of `(query, params)` tuples to execute in a single transaction.
+  - `queries`: A list of `(query, params)` tuples  or strings to execute in a single transaction.
   - `transaction_options`: Optional `NeonTransactionOptions` controlling transaction isolation, read-only mode, and deferrable settings.
 - **Returns:**
   - A list of results corresponding to each query, either as `FullQueryResults` or a list of rows.
 - **Raises:**
-  - `NeonHTTPResponseError` for HTTP issues.
-  - `InvalidAuthTokenError` or adaptation errors as applicable.
-  - `TransactionConfigurationError` if the provided transaction options are invalid.
-  - `PostgresAdaptationError` if a parameter cannot be adapted to a PostgreSQL type.
-  - `PythonAdaptationError` if a PostgreSQL value cannot be converted to a Python type.
+  - `NeonHTTPResponseError`: If the HTTP request fails.
+  - `InvalidAuthTokenError`: If the auth token callback returns an invalid value.
+  - `PostgresAdaptationError`: If a parameter cannot be adapted to a PostgreSQL type.
+  - `PythonAdaptationError`: If a PostgreSQL value cannot be converted to a Python type.
 
 ## Errors
 
