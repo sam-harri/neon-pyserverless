@@ -17,6 +17,7 @@ build-backend = "hatchling.build"
 [tool.uv]
 dev-dependencies = [
     "pyright>=1.1.396",
+    "pytest-cov>=6.0.0",
     "pytest>=8.3.5",
     "ruff>=0.9.9",
 ]
@@ -25,6 +26,7 @@ dev-dependencies = [
 [tool.ruff]
 fix = true
 line-length = 120
+
 
 [tool.ruff.lint]
 extend-select = ["I"]
@@ -37,6 +39,18 @@ ignore = [
     "D212" # conflicts with D213
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "ANN001", # type hints
+    "SLF001", # access to private members
+    "ANN201", # no return type
+    "S101", # allow assert
+    "PLR2004", # magic values
+    "D100", # docstrings in test modules
+    "D101", # docstrings in test classes
+    "INP001", # no implicit namespace package for tests
+]
+
 [tool.ruff.lint.isort]
 known-first-party = ["pyserverless"]
 combine-as-imports = true
@@ -47,6 +61,7 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
 
+
 [tool.pytest.ini_options]
 pythonpath = [
     "src",
@@ -54,8 +69,8 @@ pythonpath = [
 testpaths = [
     "tests",
 ]
-addopts = "-ra -v"
+addopts = "--cov=src/pyserverless --cov-fail-under=90 --cov-branch --cov-report=term-missing -v tests/"
 
 
 [tool.pyright]
-include = ["src"]
+include = ["src/pyserverless"]

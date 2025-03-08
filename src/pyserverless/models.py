@@ -34,6 +34,7 @@ class FullQueryResults:
 
     """
 
+    # Not snake case so it matches the API response and can be unpacked
     rows: QueryRows
     fields: list[FieldDef]
     rowCount: int  # noqa: N815
@@ -166,5 +167,4 @@ class NeonTransactionOptions(HTTPQueryOptions):
             raise TransactionConfigurationError(
                 self.isolation_level.value,
                 self.read_only,
-                self.deferrable,
             )

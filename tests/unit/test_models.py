@@ -1,11 +1,12 @@
 import pytest
-from pyserverless.models import NeonTransactionOptions, IsolationLevel
+
 from pyserverless.errors import TransactionConfigurationError
+from pyserverless.models import IsolationLevel, NeonTransactionOptions
 
 
 class TestNeonTransactionOptions:
     @pytest.mark.parametrize(
-        "isolation_level,read_only",
+        ("isolation_level", "read_only"),
         [
             (IsolationLevel.READ_COMMITTED, True),
             (IsolationLevel.REPEATABLE_READ, True),

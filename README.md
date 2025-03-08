@@ -106,12 +106,12 @@ A cleaner and more supported way to do this will be added in the future.
   - `ConnectionStringMissingError`: If no connection string is provided and `DATABASE_URL` is not set.
   - `ConnectionStringFormattingError`: If the provided connection string is not correctly formatted.
 
-### `query(query: str, params: tuple[Any, ...] = (), opts: HTTPQueryOptions | None = None) -> FullQueryResults | QueryRows`
+### `query(query: str, params: tuple[Any, ...] = (), opts: HTTPQueryOptions = HTTPQueryOptions()) -> FullQueryResults | QueryRows`
 
 - **Parameters:**
   - `query`: The SQL query string with placeholders (`$1`, `$2`, etc.).
   - `params`: A tuple of parameters to bind to the query.
-  - `opts`: Optional `HTTPQueryOptions` to control behavior such as full results, array mode, or timeouts.
+  - `query_options`: Optional `HTTPQueryOptions` to control behavior such as full results, array mode, or timeouts.
 - **Returns:**
   - Either a `FullQueryResults` object (if `full_results=True`) or a list of rows.
 - **Raises:**
@@ -120,11 +120,11 @@ A cleaner and more supported way to do this will be added in the future.
   - `PostgresAdaptationError` if a parameter cannot be adapted to a PostgreSQL type.
   - `PythonAdaptationError` if a PostgreSQL value cannot be converted to a Python type.
 
-### `transaction(queries: list[tuple[str, tuple[Any, ...]]], opts: NeonTransactionOptions | None = None) -> list[FullQueryResults] | list[QueryRows]`
+### `transaction(queries: list[tuple[str, tuple[Any, ...]]], transaction_options: NeonTransactionOptions = NeonTransactionOptions()) -> list[FullQueryResults] | list[QueryRows]`
 
 - **Parameters:**
   - `queries`: A list of `(query, params)` tuples to execute in a single transaction.
-  - `opts`: Optional `NeonTransactionOptions` controlling transaction isolation, read-only mode, and deferrable settings.
+  - `transaction_options`: Optional `NeonTransactionOptions` controlling transaction isolation, read-only mode, and deferrable settings.
 - **Returns:**
   - A list of results corresponding to each query, either as `FullQueryResults` or a list of rows.
 - **Raises:**

@@ -1,20 +1,19 @@
+import datetime
+import ipaddress
+import uuid
+from decimal import Decimal
 from unittest.mock import Mock, patch
 
 import httpx
 import pytest
-
-import datetime
-from decimal import Decimal
-import ipaddress
-import uuid
-import pytest
-import psycopg.postgres
 
 from pyserverless.errors import (
     ConnectionStringFormattingError,
     ConnectionStringMissingError,
     InvalidAuthTokenError,
     NeonHTTPResponseError,
+    PostgresAdaptationError,
+    PythonAdaptationError,
 )
 from pyserverless.models import FullQueryResults, HTTPQueryOptions, NeonTransactionOptions
 from pyserverless.neon import Neon
@@ -22,11 +21,13 @@ from pyserverless.neon import Neon
 
 @pytest.fixture
 def mock_neon_client():
+    """Mock Neon client."""
     return Neon("postgresql://user:pass@hostname/dbname")
 
 
 @pytest.fixture
 def mock_response_object_mode():
+    """Mock response for query in object mode."""
     response = Mock(spec=httpx.Response)
     response.status_code = httpx.codes.OK
     response.json.return_value = {
@@ -81,6 +82,7 @@ def mock_response_object_mode():
 
 @pytest.fixture
 def mock_response_array_mode():
+    """Mock response for query in array mode."""
     response = Mock(spec=httpx.Response)
     response.status_code = httpx.codes.OK
     response.json.return_value = {
@@ -132,6 +134,7 @@ def mock_response_array_mode():
 
 @pytest.fixture
 def mock_response_transaction_object_mode():
+    """Mock response for transaction in object mode."""
     response = Mock(spec=httpx.Response)
     response.status_code = httpx.codes.OK
     response.json.return_value = {
@@ -177,6 +180,7 @@ def mock_response_transaction_object_mode():
 
 @pytest.fixture
 def mock_response_transaction_array_mode():
+    """Mock response for transaction in array mode."""
     response = Mock(spec=httpx.Response)
     response.status_code = httpx.codes.OK
     response.json.return_value = {
@@ -221,27 +225,9 @@ def mock_response_transaction_array_mode():
 
 
 class TestNeon:
-    def test_init_with_valid_connection_string(self):
-        valid_connection_string = "postgresql://user:pass@hostname/dbname"
-        neon = Neon(valid_connection_string)
-        assert neon.connection_string == valid_connection_string
-        assert neon.url == "https://hostname/sql"
-
-    def test_init_with_invalid_connection_string(self):
-        with pytest.raises(ConnectionStringFormattingError):
-            Neon("invalid://connection/string")
-
-    @patch.dict("os.environ", {"DATABASE_URL": "postgresql://user:pass@hostname/dbname"})
-    def test_init_with_env_variable(self):
-        neon = Neon()
-        assert neon.connection_string == "postgresql://user:pass@hostname/dbname"
-
-    def test_init_with_no_connection_string(self):
-        with pytest.raises(ConnectionStringMissingError):
-            Neon()
-
     @patch("httpx.Client")
     def test_query_object_mode(self, mock_client, mock_neon_client, mock_response_object_mode):
+        """Test query in object mode."""
         mock_client.return_value.__enter__.return_value.post.return_value = mock_response_object_mode
 
         result = mock_neon_client.query(
@@ -260,6 +246,7 @@ class TestNeon:
 
     @patch("httpx.Client")
     def test_query_array_mode(self, mock_client, mock_neon_client, mock_response_array_mode):
+        """Test query in array mode."""
         mock_client.return_value.__enter__.return_value.post.return_value = mock_response_array_mode
 
         result = mock_neon_client.query(
@@ -278,6 +265,7 @@ class TestNeon:
 
     @patch("httpx.Client")
     def test_query_object_mode_rows(self, mock_client, mock_neon_client, mock_response_object_mode):
+        """Test query in object mode without full results."""
         mock_client.return_value.__enter__.return_value.post.return_value = mock_response_object_mode
 
         result = mock_neon_client.query(
@@ -294,6 +282,7 @@ class TestNeon:
 
     @patch("httpx.Client")
     def test_query_array_mode_rows(self, mock_client, mock_neon_client, mock_response_array_mode):
+        """Test query in array mode without full results."""
         mock_client.return_value.__enter__.return_value.post.return_value = mock_response_array_mode
 
         result = mock_neon_client.query(
@@ -310,9 +299,10 @@ class TestNeon:
 
     @patch("httpx.Client")
     def test_query_with_auth_token(self, mock_client, mock_neon_client, mock_response_object_mode):
+        """Test query with auth token."""
         mock_client.return_value.__enter__.return_value.post.return_value = mock_response_object_mode
 
-        def get_token():
+        def get_token() -> str:
             return "test-token"
 
         _ = mock_neon_client.query(
@@ -326,6 +316,8 @@ class TestNeon:
         assert call_args[1]["headers"]["Authorization"] == "Bearer test-token"
 
     def test_query_with_invalid_auth_token(self, mock_neon_client):
+        """Test query with invalid auth token."""
+
         def get_token() -> None:
             return None
 
@@ -348,6 +340,7 @@ class TestNeon:
 
     @patch("httpx.Client")
     def test_query_http_error(self, mock_client, mock_neon_client):
+        """Test query with HTTP error."""
         mock_response = Mock(spec=httpx.Response)
         mock_response.status_code = 500
         mock_response.text = "Internal Server Error"
@@ -358,6 +351,7 @@ class TestNeon:
 
     @patch("httpx.Client")
     def test_query_with_query_callback(self, mock_client, mock_neon_client, mock_response_object_mode):
+        """Test query with query callback."""
         mock_client.return_value.__enter__.return_value.post.return_value = mock_response_object_mode
 
         mock_callback = Mock()
@@ -375,6 +369,7 @@ class TestNeon:
 
     @patch("httpx.Client")
     def test_query_with_result_callback(self, mock_client, mock_neon_client, mock_response_object_mode):
+        """Test query with result callback."""
         mock_client.return_value.__enter__.return_value.post.return_value = mock_response_object_mode
 
         mock_callback = Mock()
@@ -398,6 +393,7 @@ class TestNeon:
 
     @patch("httpx.Client")
     def test_query_with_timeout(self, mock_client, mock_neon_client, mock_response_object_mode):
+        """Test query with timeout."""
         mock_client.return_value.__enter__.return_value.post.return_value = mock_response_object_mode
 
         # Test with a reasonable timeout for a slow query
@@ -411,6 +407,7 @@ class TestNeon:
 
     @patch("httpx.Client")
     def test_transaction_object_mode(self, mock_client, mock_neon_client, mock_response_transaction_object_mode):
+        """Test transaction in object mode."""
         mock_client.return_value.__enter__.return_value.post.return_value = mock_response_transaction_object_mode
 
         queries = [
@@ -447,6 +444,7 @@ class TestNeon:
 
     @patch("httpx.Client")
     def test_transaction_array_mode(self, mock_client, mock_neon_client, mock_response_transaction_array_mode):
+        """Test transaction in array mode."""
         mock_client.return_value.__enter__.return_value.post.return_value = mock_response_transaction_array_mode
 
         queries = [
@@ -469,8 +467,25 @@ class TestNeon:
         assert results[0].rows[0][0] == 1
         assert results[0].rowAsArray is True
 
+    @patch("httpx.Client")
+    def test_transaction_with_auth_token(self, mock_client, mock_neon_client, mock_response_transaction_object_mode):
+        """Test transaction with auth token."""
+        mock_client.return_value.__enter__.return_value.post.return_value = mock_response_transaction_object_mode
+
+        def get_token() -> str:
+            return "test-token"
+
+        _ = mock_neon_client.transaction(
+            [("query;", ())],
+            NeonTransactionOptions(auth_token=get_token),
+        )
+
+        mock_client.return_value.__enter__.return_value.post.assert_called_once()
+        call_args = mock_client.return_value.__enter__.return_value.post.call_args
+        assert call_args[1]["headers"]["Authorization"] == "Bearer test-token"
+
     @pytest.mark.parametrize(
-        "oid, raw_value, expected_type, expected_value",
+        ("oid", "raw_value", "expected_type", "expected_value"),
         [
             (23, "1", int, 1),
             (20, "9223372036854775807", int, 9223372036854775807),
@@ -485,12 +500,12 @@ class TestNeon:
             (1043, "variable text", str, "variable text"),
             (1082, "2024-02-26", datetime.date, datetime.date(2024, 2, 26)),
             (1083, "14:30:00", datetime.time, datetime.time(14, 30, 0)),
-            (1114, "2024-02-26 14:30:00", datetime.datetime, datetime.datetime(2024, 2, 26, 14, 30, 0)),
+            (1114, "2024-02-26 14:30:00", datetime.datetime, datetime.datetime(2024, 2, 26, 14, 30, 0, tzinfo=None)),  # noqa: DTZ001
             (
                 1184,
-                "2024-02-26 14:30:00+00",
+                "2024-02-27 14:30:00+00",
                 datetime.datetime,
-                datetime.datetime(2024, 2, 26, 14, 30, 0, tzinfo=datetime.timezone.utc),
+                datetime.datetime(2024, 2, 27, 14, 30, 0, tzinfo=datetime.UTC),
             ),
             (1186, "1 day 02:30:00", datetime.timedelta, datetime.timedelta(days=1, hours=2, minutes=30)),
             (17, "\\xdeadbeef", bytes, bytes.fromhex("deadbeef")),
@@ -511,7 +526,134 @@ class TestNeon:
             (628, "{1,1,1}", str, "{1,1,1}"),
         ],
     )
-    def test_convert_value(self, mock_neon_client, oid, raw_value, expected_type, expected_value):
-        result = mock_neon_client._convert_value(raw_value, oid)
+    def test_pg_to_python(self, mock_neon_client, oid, raw_value, expected_type, expected_value):
+        """Test conversion of PostgreSQL values to Python types."""
+        result = mock_neon_client._pg_to_python(raw_value, oid)
         assert isinstance(result, expected_type)
         assert result == expected_value
+
+    @pytest.mark.parametrize(
+        ("value", "type_oid"),
+        [
+            ("not_an_int", 23),  # integer
+            ("not_a_uuid", 2950),  # uuid
+            ("{invalid_json", 114),  # json
+            ("2024-13-45", 1082),  # date
+            ("999.999.999.999", 869),  # inet
+        ],
+    )
+    def test_pg_to_python_conversion_errors(self, mock_neon_client, value, type_oid):
+        """Test that invalid values raise PythonAdaptationError with appropriate messages."""
+        with pytest.raises(PythonAdaptationError):
+            mock_neon_client._pg_to_python(value, type_oid)
+
+    @pytest.mark.parametrize(
+        "connection_string",
+        [
+            "postgresql://user:pass@hostname/dbname",
+            "postgres://admin:secret@my-db.host.com/mydb",
+            "postgresql://user:complex!pass@word@neon.db/app",
+            "postgresql://user:pass@ep-cool-darkness-123456.us-east-2.aws.neon.tech/dbname",
+            "postgresql://user:pass@ep-quiet-forest-123456-pooler.us-east-2.aws.neon.tech/dbname",
+            # missing password is okay (passwordless authenticated role for None Autheorize RLS)
+            "postgresql://user@hostname/dbname",
+        ],
+    )
+    def test_valid_connection_strings(self, connection_string):
+        """Test that valid connection strings are parsed successfully."""
+        neon = Neon(connection_string)
+        assert neon._connection_string == connection_string
+
+    @pytest.mark.parametrize(
+        "connection_string",
+        [
+            "invalid://user:pass@hostname/dbname",  # wrong protocol
+            "postgresql://@hostname/dbname",  # missing username
+            "postgresql://user:pass@/dbname",  # missing hostname
+            "postgresql://user:pass@hostname",  # missing database name
+            "postgresql://user:pass@hostname/",  # empty database name
+            "not_a_url",  # completely invalid URL
+            "",  # empty string
+        ],
+    )
+    def test_invalid_connection_strings(self, connection_string):
+        """Test that invalid connection strings raise appropriate errors."""
+        with pytest.raises(ConnectionStringFormattingError):
+            Neon(connection_string)
+
+    def test_connection_string_parsing(self):
+        """Test that connection string is parsed into correct URL and stored properly."""
+        connection_string = "postgresql://user:pass@hostname/dbname"
+        neon = Neon(connection_string)
+
+        assert neon._url == "https://hostname/sql"
+        assert neon._connection_string == connection_string
+
+    def test_missing_connection_string(self):
+        """Test that missing connection string raises appropriate error."""
+        with pytest.raises(ConnectionStringMissingError):
+            Neon()
+
+    @patch.dict("os.environ", {"DATABASE_URL": "postgresql://user:pass@hostname/dbname"})
+    def test_init_with_env_variable(self):
+        """Test that Neon can be initialized with an environment variable."""
+        neon = Neon()
+        assert neon._connection_string == "postgresql://user:pass@hostname/dbname"
+
+    @pytest.mark.parametrize(
+        ("python_value", "expected_pg_string"),
+        [
+            (42, "42"),
+            (-17, " -17"),
+            (3.14159, "3.14159"),
+            (Decimal("123456.78"), "123456.78"),
+            ("hello", "'hello'"),
+            ("quote'mark", "'quote''mark'"),
+            (True, "true"),
+            (False, "false"),
+            (None, "NULL"),
+            (datetime.date(2024, 2, 26), "'2024-02-26'::date"),
+            (datetime.time(14, 30, 0), "'14:30:00'::time"),
+            (datetime.datetime(2024, 2, 26, 14, 30, 0, tzinfo=None), "'2024-02-26 14:30:00'::timestamp"),  # noqa: DTZ001
+            (
+                datetime.datetime(2024, 2, 27, 14, 30, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=-5))),
+                "'2024-02-27 14:30:00-05:00'::timestamptz",
+            ),
+            (
+                datetime.datetime(2024, 2, 27, 14, 30, 0, tzinfo=datetime.UTC),
+                "'2024-02-27 14:30:00+00:00'::timestamptz",
+            ),
+            (datetime.timedelta(days=1, hours=2, minutes=30), "'1 day 2:30:00'::interval"),
+            (bytes.fromhex("deadbeef"), "\\xdeadbeef"),
+            ({"key": "value", "array": [1, 2, 3]}, '\'{"key": "value", "array": [1, 2, 3]}\''),
+            ([1, 2, 3], "'[1, 2, 3]'"),
+            ([1, 2, 3, 4, 5], "'[1, 2, 3, 4, 5]'"),
+            (["one", "two", "three"], '\'["one", "two", "three"]\''),
+            (uuid.UUID("123e4567-e89b-12d3-a456-426614174000"), "'123e4567e89b12d3a456426614174000'::uuid"),
+            (ipaddress.IPv4Address("192.168.1.1"), "'192.168.1.1'::inet"),
+            (ipaddress.IPv4Network("192.168.1.0/24"), "'192.168.1.0/24'::cidr"),
+            ("", "''"),
+            (" ", "' '"),
+            ("\n", "'\n'"),
+            ("\\", " E'\\\\'"),
+        ],
+    )
+    def test_python_to_pg(self, mock_neon_client, python_value, expected_pg_string):
+        """Test conversion of Python values to their PostgreSQL string representation."""
+        result = mock_neon_client._python_to_pg(python_value)
+        assert result == expected_pg_string
+
+    @pytest.mark.parametrize(
+        "python_value",
+        [
+            object(),
+            lambda x: x,
+            type("TestClass", (), {}),
+            complex(1, 2),
+            {1, 2, 3},
+        ],
+    )
+    def test_python_to_pg_invalid_types(self, mock_neon_client, python_value):
+        """Test that invalid Python types raise appropriate errors."""
+        with pytest.raises(PostgresAdaptationError):
+            mock_neon_client._python_to_pg(python_value)
