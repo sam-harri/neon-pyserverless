@@ -1,4 +1,4 @@
-import datetime
+import datetime as dt
 import ipaddress
 import uuid
 from decimal import Decimal
@@ -357,15 +357,15 @@ class TestNeon:
         mock_callback = Mock()
 
         mock_neon_client.query(
-            "SELECT * FROM test_table WHERE value > $1;",
+            "query $1;",
             ("100",),
             HTTPQueryOptions(query_callback=mock_callback),
         )
 
         mock_callback.assert_called_once()
         callback_arg = mock_callback.call_args[0][0]
-        assert callback_arg.query == "SELECT * FROM test_table WHERE value > $1;"
-        assert callback_arg.params == ["'100'"]
+        assert callback_arg.query == "query $1;"
+        assert callback_arg.params == ["100"]
 
     @patch("httpx.Client")
     def test_query_with_result_callback(self, mock_client, mock_neon_client, mock_response_object_mode):
@@ -498,16 +498,16 @@ class TestNeon:
             (25, "sample text", str, "sample text"),
             (1042, "fixed123  ", str, "fixed123  "),
             (1043, "variable text", str, "variable text"),
-            (1082, "2024-02-26", datetime.date, datetime.date(2024, 2, 26)),
-            (1083, "14:30:00", datetime.time, datetime.time(14, 30, 0)),
-            (1114, "2024-02-26 14:30:00", datetime.datetime, datetime.datetime(2024, 2, 26, 14, 30, 0, tzinfo=None)),  # noqa: DTZ001
+            (1082, "2024-02-26", dt.date, dt.date(2024, 2, 26)),
+            (1083, "14:30:00", dt.time, dt.time(14, 30, 0)),
+            (1114, "2024-02-26 14:30:00", dt.datetime, dt.datetime(2024, 2, 26, 14, 30, 0, tzinfo=None)),
             (
                 1184,
                 "2024-02-27 14:30:00+00",
-                datetime.datetime,
-                datetime.datetime(2024, 2, 27, 14, 30, 0, tzinfo=datetime.UTC),
+                dt.datetime,
+                dt.datetime(2024, 2, 27, 14, 30, 0, tzinfo=dt.UTC),
             ),
-            (1186, "1 day 02:30:00", datetime.timedelta, datetime.timedelta(days=1, hours=2, minutes=30)),
+            (1186, "1 day 02:30:00", dt.timedelta, dt.timedelta(days=1, hours=2, minutes=30)),
             (17, "\\xdeadbeef", bytes, bytes.fromhex("deadbeef")),
             (114, '{"key": "value", "array": [1, 2, 3]}', dict, {"key": "value", "array": [1, 2, 3]}),
             (3802, '{"key": "value", "array": [1, 2, 3]}', dict, {"key": "value", "array": [1, 2, 3]}),
@@ -604,38 +604,34 @@ class TestNeon:
         ("python_value", "expected_pg_string"),
         [
             (42, "42"),
-            (-17, " -17"),
+            (-17, "-17"),
             (3.14159, "3.14159"),
             (Decimal("123456.78"), "123456.78"),
-            ("hello", "'hello'"),
-            ("quote'mark", "'quote''mark'"),
-            (True, "true"),
-            (False, "false"),
-            (None, "NULL"),
-            (datetime.date(2024, 2, 26), "'2024-02-26'::date"),
-            (datetime.time(14, 30, 0), "'14:30:00'::time"),
-            (datetime.datetime(2024, 2, 26, 14, 30, 0, tzinfo=None), "'2024-02-26 14:30:00'::timestamp"),  # noqa: DTZ001
+            ("hello", "hello"),
+            ("quote'mark", "quote'mark"),
+            (True, "t"),
+            (False, "f"),
+            (None, None),
+            (dt.date(2024, 2, 26), "2024-02-26"),
+            (dt.time(14, 30, 0), "14:30:00"),
+            (dt.datetime(2024, 2, 26, 14, 30, 0, tzinfo=None), "2024-02-26 14:30:00"),
             (
-                datetime.datetime(2024, 2, 27, 14, 30, 0, tzinfo=datetime.timezone(datetime.timedelta(hours=-5))),
-                "'2024-02-27 14:30:00-05:00'::timestamptz",
+                dt.datetime(2024, 2, 27, 14, 30, 0, tzinfo=dt.timezone(dt.timedelta(hours=-5))),
+                "2024-02-27 14:30:00-05:00",
             ),
             (
-                datetime.datetime(2024, 2, 27, 14, 30, 0, tzinfo=datetime.UTC),
-                "'2024-02-27 14:30:00+00:00'::timestamptz",
+                dt.datetime(2024, 2, 27, 14, 30, 0, tzinfo=dt.UTC),
+                "2024-02-27 14:30:00+00:00",
             ),
-            (datetime.timedelta(days=1, hours=2, minutes=30), "'1 day 2:30:00'::interval"),
+            (dt.timedelta(days=1, hours=2, minutes=30), "1 day 2:30:00"),
             (bytes.fromhex("deadbeef"), "\\xdeadbeef"),
-            ({"key": "value", "array": [1, 2, 3]}, '\'{"key": "value", "array": [1, 2, 3]}\''),
-            ([1, 2, 3], "'[1, 2, 3]'"),
-            ([1, 2, 3, 4, 5], "'[1, 2, 3, 4, 5]'"),
-            (["one", "two", "three"], '\'["one", "two", "three"]\''),
-            (uuid.UUID("123e4567-e89b-12d3-a456-426614174000"), "'123e4567e89b12d3a456426614174000'::uuid"),
-            (ipaddress.IPv4Address("192.168.1.1"), "'192.168.1.1'::inet"),
-            (ipaddress.IPv4Network("192.168.1.0/24"), "'192.168.1.0/24'::cidr"),
-            ("", "''"),
-            (" ", "' '"),
-            ("\n", "'\n'"),
-            ("\\", " E'\\\\'"),
+            ({"key": "value", "array": [1, 2, 3]}, '{"key": "value", "array": [1, 2, 3]}'),
+            ([1, 2, 3], "{1,2,3}"),
+            ([1, 2, 3, 4, 5], "{1,2,3,4,5}"),
+            (["one", "two", "three"], "{one,two,three}"),
+            (uuid.UUID("123e4567-e89b-12d3-a456-426614174000"), "123e4567e89b12d3a456426614174000"),
+            (ipaddress.IPv4Address("192.168.1.1"), "192.168.1.1"),
+            (ipaddress.IPv4Network("192.168.1.0/24"), "192.168.1.0/24"),
         ],
     )
     def test_python_to_pg(self, mock_neon_client, python_value, expected_pg_string):

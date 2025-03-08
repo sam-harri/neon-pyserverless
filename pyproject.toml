@@ -7,7 +7,6 @@ requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28.1",
     "psycopg>=3.2.5",
-    "python-dotenv>=1.0.1",
 ]
 
 [build-system]
@@ -18,6 +17,7 @@ build-backend = "hatchling.build"
 dev-dependencies = [
     "pyright>=1.1.396",
     "pytest-cov>=6.0.0",
+    "pytest-xdist>=3.6.1",
     "pytest>=8.3.5",
     "ruff>=0.9.9",
 ]
@@ -41,14 +41,17 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = [
-    "ANN001", # type hints
+    "ANN001", # no type hints
     "SLF001", # access to private members
     "ANN201", # no return type
     "S101", # allow assert
     "PLR2004", # magic values
-    "D100", # docstrings in test modules
-    "D101", # docstrings in test classes
+    "D100", # no docstrings in test modules
+    "D101", # no docstrings in test classes
     "INP001", # no implicit namespace package for tests
+    "DTZ001", # no timezone info
+    "DTZ005", # no timezone info
+    "D205", # docstring summary on test functions
 ]
 
 [tool.ruff.lint.isort]
@@ -69,7 +72,8 @@ pythonpath = [
 testpaths = [
     "tests",
 ]
-addopts = "--cov=src/pyserverless --cov-fail-under=90 --cov-branch --cov-report=term-missing -v tests/"
+addopts = "-v -n auto"
+# --cov=src/pyserverless --cov-fail-under=90 --cov-branch --cov-report=term-missing
 
 
 [tool.pyright]

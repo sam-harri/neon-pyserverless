@@ -1,17 +1,16 @@
 """Serverless client for Neon database queries over HTTP."""
 
-import json
 import os
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
 import psycopg.types.datetime as psycopg_datetime
-from dotenv import load_dotenv
-from psycopg import Error as PsycopgError, sql
-from psycopg.adapt import Transformer
+from psycopg import Error as PsycopgError
+from psycopg.adapt import PyFormat, Transformer
 from psycopg.postgres import register_default_adapters, register_default_types, types
 from psycopg.pq import Format
+from psycopg.types.json import Jsonb
 
 from pyserverless.errors import (
     ConnectionStringFormattingError,
@@ -203,7 +202,7 @@ class Neon:
 
     def transaction(
         self,
-        queries: list[tuple[str, tuple[Any, ...] | None]],
+        queries: list[tuple[str, tuple[Any, ...]] | str],
         transaction_options: NeonTransactionOptions | None = None,
     ) -> list[FullQueryResults] | list[QueryRows]:
         """
@@ -211,32 +210,35 @@ class Neon:
 
         Parameters
         ----------
-        queries : list[tuple[str, tuple[Any, ...] | None]]
-            List of (query, params) tuples to execute in sequence.
-        transaction_options : NeonTransactionOptions | None, optional
-            Optional transaction options.
+        queries : list[tuple[str, tuple[Any, ...] | None] | str]
+            A list of queries to execute in sequence. Each element can either be:
+            - A tuple (query, params), where params is a tuple of values (or None) to substitute
+                into the query.
+            - A plain query string (equivalent to (query, ())), if no parameters are needed.
+        transaction_options : NeonTransactionOptions, optional
+            Options for the transaction. If not provided, a new NeonTransactionOptions instance is used.
 
         Returns
         -------
-        list[FullQueryResults] | list[QueryRows]
-            List of either FullQueryResults (if full_results=True) or
-            QueryRows (if full_results=False), one for each query.
+        list[FullQueryResults] or list[QueryRows]
+            A list of results, one for each query. If the `full_results` flag in the options is True,
+            each result is a FullQueryResults object; otherwise, it is a list of query rows.
 
         Raises
         ------
         NeonHTTPResponseError
-            If the HTTP request fails
+            If the HTTP request fails.
         InvalidAuthTokenError
-            If auth token is invalid
+            If the authentication token is invalid.
         ParameterAdaptationError
-            If parameters can't be adapted from Python types to Postgres types
+            If parameters cannot be adapted from Python types to PostgreSQL types.
 
         Examples
         --------
         >>> results = neon.transaction(
         ...     [
         ...         ("INSERT INTO users (name) VALUES ($1)", ("John",)),
-        ...         ("SELECT * FROM users", ()),
+        ...         "SELECT * FROM users",
         ...     ],
         ...     NeonTransactionOptions(
         ...         isolation_level=IsolationLevel.SERIALIZABLE,
@@ -247,17 +249,16 @@ class Neon:
         """
         transaction_options = transaction_options or NeonTransactionOptions()
 
-        processed_queries = []
-        for query, params in queries:
-            checked_params = params or ()
-            processed_params = [self._python_to_pg(p) for p in checked_params]
+        # Unparameterized queries are wrapped as (query, ()).
+        queries = [(item, ()) if isinstance(item, str) else item for item in queries]
 
-            processed_queries.append(
-                {
-                    "query": query,
-                    "params": processed_params,
-                }
-            )
+        processed_queries = [
+            {
+                "query": query,
+                "params": [self._python_to_pg(p) for p in params],
+            }
+            for query, params in queries
+        ]
         body = {"queries": processed_queries}
 
         headers: dict[str, str] = {
@@ -298,19 +299,23 @@ class Neon:
 
         return converted_results
 
-    def _python_to_pg(self, param: Any) -> str:
+    def _python_to_pg(self, param: Any) -> Any:
         """Convert a single Python value to its Postgres representation."""
-        # special case for bytes, same as TS client
-        # https://www.postgresql.org/docs/current/datatype-binary.html#DATATYPE-BINARY-BYTEA-HEX-FORMAT
+        if param is None:
+            return None
+        if isinstance(param, dict):
+            param = Jsonb(param)
         if isinstance(param, bytes):
-            return "\\x" + param.hex()
-        try:
-            if isinstance(param, dict | list):
-                param = json.dumps(param)
-            return sql.Literal(param).as_string(None)
+            param = "\\x" + param.hex()
 
+        try:
+            dumper = self._transformer.get_dumper(param, PyFormat.TEXT)
+            result = dumper.dump(param)
+            if isinstance(result, bytes):
+                result = result.decode("utf-8")
         except PsycopgError as e:
             raise PostgresAdaptationError(param) from e
+        return result
 
     def _pg_to_python(self, value: str | None, type_oid: int) -> Any:
         """Convert a single Postgres value to its Python native type."""
@@ -344,7 +349,6 @@ class Neon:
     def _parse_connection_string(self, connection_string: str | None = None) -> tuple[str, str]:
         """Parse and validate a PostgreSQL connection string."""
         if connection_string is None:
-            load_dotenv()
             connection_string = os.getenv("DATABASE_URL")
         if connection_string is None:
             raise ConnectionStringMissingError
