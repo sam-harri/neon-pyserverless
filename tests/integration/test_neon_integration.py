@@ -10,8 +10,6 @@ from pyserverless.neon import Neon
 
 INTEGRATION_DB_URL = os.getenv("INTEGRATION_DATABASE_URL")
 
-integration_table_name = "integration_test_types"
-
 
 @pytest.fixture(scope="module")
 def mock_neon_client():
@@ -112,37 +110,37 @@ class TestNeonIntegration:
                 ("DROP TABLE IF EXISTS test_integration_table;"),
                 (
                     """
-            CREATE TEMPORARY TABLE test_integration_table (
-                id SERIAL PRIMARY KEY,
-                int_val INTEGER,
-                float_val REAL,
-                decimal_val NUMERIC,
-                text_val TEXT,
-                bool_val BOOLEAN,
-                date_val DATE,
-                time_val TIME,
-                ts_val TIMESTAMP,
-                tstz_val TIMESTAMPTZ,
-                interval_val INTERVAL,
-                bytea_val BYTEA,
-                json_val JSONB,
-                uuid_val UUID,
-                inet_val INET,
-                cidr_val CIDR,
-                array_int_val INTEGER[]
-            );
-            """
+                CREATE TEMPORARY TABLE test_integration_table (
+                    id SERIAL PRIMARY KEY,
+                    int_val INTEGER,
+                    float_val REAL,
+                    decimal_val NUMERIC,
+                    text_val TEXT,
+                    bool_val BOOLEAN,
+                    date_val DATE,
+                    time_val TIME,
+                    ts_val TIMESTAMP,
+                    tstz_val TIMESTAMPTZ,
+                    interval_val INTERVAL,
+                    bytea_val BYTEA,
+                    json_val JSONB,
+                    uuid_val UUID,
+                    inet_val INET,
+                    cidr_val CIDR,
+                    array_int_val INTEGER[]
+                );
+                """
                 ),
                 (
                     """
-        INSERT INTO test_integration_table (
-            int_val, float_val, decimal_val, text_val, bool_val, date_val, time_val,
-            ts_val, tstz_val, interval_val, bytea_val, json_val, uuid_val, inet_val, cidr_val, array_int_val
-        )
-        VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-            );
-            """,
+                INSERT INTO test_integration_table (
+                    int_val, float_val, decimal_val, text_val, bool_val, date_val, time_val,
+                    ts_val, tstz_val, interval_val, bytea_val, json_val, uuid_val, inet_val, cidr_val, array_int_val
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+                );
+                """,
                     query_row_values,
                 ),
                 ("SELECT * FROM test_integration_table ORDER BY id ASC LIMIT 1;"),

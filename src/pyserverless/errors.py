@@ -56,10 +56,13 @@ class InvalidAuthTokenError(NeonPyServerlessError):
         self,
         token: Any,
     ) -> None:
+        token_type = type(token).__name__
+        token_value = str(token)
         message = (
             "Invalid authentication token received from token callback.\n"
             "Token was either None or not a string.\n"
-            f"Token value: {token}\n\n"
+            f"Token type: {token_type}\n"
+            f"Token value: {token_value}\n\n"
         )
         super().__init__(message)
 

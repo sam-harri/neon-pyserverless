@@ -11,7 +11,7 @@ from pyserverless.errors import TransactionConfigurationError
 FieldDef = dict[str, Any]
 
 # QueryRows is either a list of tuples (when arrayMode is True) or a list of dicts (when False)
-QueryRows = list[list[str]] | list[dict[str, str]]
+QueryRows = list[list[Any]] | list[dict[str, Any]]
 
 
 @dataclass(frozen=True)
