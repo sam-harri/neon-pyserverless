@@ -256,11 +256,13 @@ class Neon:
         body = {"queries": processed_queries}
 
         headers = self._build_headers(transaction_options)
-        headers.update({
-            "Neon-Batch-Isolation-Level": transaction_options.isolation_level.value,
-            "Neon-Batch-Read-Only": str(transaction_options.read_only).lower(),
-            "Neon-Batch-Deferrable": str(transaction_options.deferrable).lower(),
-        })
+        headers.update(
+            {
+                "Neon-Batch-Isolation-Level": transaction_options.isolation_level.value,
+                "Neon-Batch-Read-Only": str(transaction_options.read_only).lower(),
+                "Neon-Batch-Deferrable": str(transaction_options.deferrable).lower(),
+            }
+        )
 
         try:
             with httpx.Client(**transaction_options.fetch_options) as client:

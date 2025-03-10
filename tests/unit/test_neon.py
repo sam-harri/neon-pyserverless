@@ -317,9 +317,10 @@ class TestNeon:
 
     def test_build_headers_with_auth_token(self, mock_neon_client):
         """Test building headers with auth token."""
+
         def get_token() -> str:
             return "test-token"
-        
+
         headers = mock_neon_client._build_headers(HTTPQueryOptions(auth_token=get_token))
         assert headers["Authorization"] == "Bearer test-token"
         assert headers["Neon-Connection-String"] == "postgresql://user:pass@hostname/dbname"
@@ -328,15 +329,16 @@ class TestNeon:
 
     def test_build_headers_with_invalid_auth_token(self, mock_neon_client):
         """Test building headers with invalid auth token."""
+
         def get_token() -> None:
             return None
-        
+
         with pytest.raises(InvalidAuthTokenError):
             mock_neon_client._build_headers(HTTPQueryOptions(auth_token=get_token))
 
         def get_token() -> int:
             return 1
-        
+
         with pytest.raises(InvalidAuthTokenError):
             mock_neon_client._build_headers(HTTPQueryOptions(auth_token=get_token))
 
