@@ -1,7 +1,7 @@
 """Serverless client for Neon database queries over HTTP."""
 
 import os
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 from urllib.parse import urlparse
 
 import httpx
@@ -106,6 +106,7 @@ class Neon:
     ...     ("SELECT * FROM users LIMIT 5", ()),
     ...     ("SELECT * FROM orders LIMIT 5 WHERE user_id = $1", (42,)),
     ... ], transaction_options=options)
+
     """
 
     def __init__(self, connection_string: str | None = None) -> None:
@@ -125,6 +126,7 @@ class Neon:
             If no connection string is provided and DATABASE_URL environment variable is not found.
         ConnectionStringFormattingError
             If the connection string is not in the correct format.
+
         """
         self._url, self._connection_string = self._parse_connection_string(connection_string)
         register_default_types(types)
@@ -163,6 +165,7 @@ class Neon:
             If auth token is invalid
         ParameterAdaptationError
             If parameters can't be adapted from Python types to Postgres types
+
         """
         params = params or ()
         query_options = query_options or HTTPQueryOptions()
@@ -240,6 +243,7 @@ class Neon:
             If the authentication token is invalid.
         ParameterAdaptationError
             If parameters cannot be adapted from Python types to PostgreSQL types.
+
         """
         transaction_options = transaction_options or NeonTransactionOptions()
 
