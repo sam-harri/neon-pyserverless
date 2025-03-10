@@ -362,9 +362,12 @@ class Neon:
             raise ConnectionStringMissingError
 
         parsed = urlparse(connection_string)
-        if parsed.scheme not in ("postgresql", "postgres"):
-            raise ConnectionStringFormattingError(connection_string)
-        if not parsed.username or not parsed.hostname or not parsed.path:
+        if (
+            parsed.scheme not in ("postgresql", "postgres")
+            or not parsed.username
+            or not parsed.hostname
+            or not parsed.path
+        ):
             raise ConnectionStringFormattingError(connection_string)
 
         pathname = parsed.path.lstrip("/")
