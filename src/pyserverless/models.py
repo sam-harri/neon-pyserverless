@@ -42,24 +42,6 @@ class FullQueryResults:
     command: str
 
 
-@dataclass(frozen=True)
-class ParameterizedQuery:
-    """
-    Represents a query with placeholders and its associated parameters.
-
-    Parameters
-    ----------
-    query : str
-        The SQL query string with placeholders.
-    params : list[Any]
-        The parameters to be substituted into the query.
-
-    """
-
-    query: str
-    params: list[Any]
-
-
 # Postgres transaction isolation level: see https://www.postgresql.org/docs/current/transaction-iso.html
 class IsolationLevel(Enum):
     """
@@ -117,10 +99,10 @@ class HTTPQueryOptions:
     full_results: bool = False
     fetch_options: dict[str, Any] = field(default_factory=dict)
     auth_token: Callable[[], str] | None = None
-    query_callback: Callable[[ParameterizedQuery], None] | None = None
+    query_callback: Callable[[str, list[Any]], None] | None = None
     result_callback: (
         Callable[
-            [ParameterizedQuery, FullQueryResults, bool, bool],
+            [str, list[Any], FullQueryResults, bool, bool],
             None,
         ]
         | None

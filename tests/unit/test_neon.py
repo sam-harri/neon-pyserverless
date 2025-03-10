@@ -363,9 +363,9 @@ class TestNeon:
         )
 
         mock_callback.assert_called_once()
-        callback_arg = mock_callback.call_args[0][0]
-        assert callback_arg.query == "query $1;"
-        assert callback_arg.params == ["100"]
+        callback_args = mock_callback.call_args[0]
+        assert callback_args[0] == "query $1;"
+        assert callback_args[1] == ["100"]
 
     @patch("httpx.Client")
     def test_query_with_result_callback(self, mock_client, mock_neon_client, mock_response_object_mode):
@@ -383,22 +383,21 @@ class TestNeon:
         mock_callback.assert_called_once()
         callback_args = mock_callback.call_args[0]
 
-        assert callback_args[0].query == "query;"
-        assert callback_args[0].params == []
-        assert isinstance(callback_args[1], FullQueryResults)
-        assert callback_args[1].rowCount == 2
+        assert callback_args[0] == "query;"
+        assert callback_args[1] == []
+        assert isinstance(callback_args[2], FullQueryResults)
+        assert callback_args[2].rowCount == 2
 
-        assert callback_args[2] is False  # array_mode
-        assert callback_args[3] is True  # full_results
+        assert callback_args[3] is False  # array_mode
+        assert callback_args[4] is True  # full_results
 
     @patch("httpx.Client")
-    def test_query_with_timeout(self, mock_client, mock_neon_client, mock_response_object_mode):
-        """Test query with timeout."""
+    def test_query_fetch_options(self, mock_client, mock_neon_client, mock_response_object_mode):
+        """Test query with fetch options."""
         mock_client.return_value.__enter__.return_value.post.return_value = mock_response_object_mode
 
-        # Test with a reasonable timeout for a slow query
         _ = mock_neon_client.query(
-            "slow query;",  # Simulating a slow query
+            "query;",
             (),
             HTTPQueryOptions(fetch_options={"timeout": 15.0}),  # 15 second timeout
         )

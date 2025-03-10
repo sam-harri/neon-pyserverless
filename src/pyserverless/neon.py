@@ -25,7 +25,6 @@ from pyserverless.models import (
     FullQueryResults,
     HTTPQueryOptions,
     NeonTransactionOptions,
-    ParameterizedQuery,
     QueryRows,
 )
 
@@ -188,10 +187,8 @@ class Neon:
         query_options = query_options or HTTPQueryOptions()
 
         processed_params = [self._python_to_pg(p) for p in params]
-        parameterized_query = ParameterizedQuery(query, processed_params)
-
         if query_options.query_callback:
-            query_options.query_callback(parameterized_query)
+            query_options.query_callback(query, processed_params)
 
         body = {
             "query": query,
@@ -231,7 +228,8 @@ class Neon:
 
         if query_options.result_callback:
             query_options.result_callback(
-                parameterized_query,
+                query,
+                processed_params,
                 results,
                 query_options.array_mode,
                 query_options.full_results,

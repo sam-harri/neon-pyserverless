@@ -74,11 +74,11 @@ results = neon.transaction(
 You can pass in callbacks to the query and transaction methods which are called right before the query is executed, and right after the results are returned, respectively.
 
 ```python
-def query_callback(query: ParameterizedQuery) -> None:
-    logger.info(f"Executing query: {query.query}")
+def query_callback(query: str, params: list[Any]) -> None:
+    logger.info(f"Executing query: {query}")
 
-def result_callback(query: ParameterizedQuery, results: FullQueryResults | QueryRows, array_mode: bool, full_results: bool):
-    logger.info(f"Query {query.query} executed with {results.rowCount} rows, array_mode: {array_mode}, full_results: {full_results}")
+def result_callback(query: str, params: list[Any], results: FullQueryResults | QueryRows, array_mode: bool, full_results: bool):
+    logger.info(f"Query {query} executed with {results.rowCount} rows, array_mode: {array_mode}, full_results: {full_results}")
 
 results = neon.query(
     "SELECT * FROM users",
