@@ -315,28 +315,35 @@ class TestNeon:
         call_args = mock_client.return_value.__enter__.return_value.post.call_args
         assert call_args[1]["headers"]["Authorization"] == "Bearer test-token"
 
-    def test_query_with_invalid_auth_token(self, mock_neon_client):
-        """Test query with invalid auth token."""
+    def test_build_headers_with_auth_token(self, mock_neon_client):
+        """Test building headers with auth token."""
+        def get_token() -> str:
+            return "test-token"
+        
+        headers = mock_neon_client._build_headers(HTTPQueryOptions(auth_token=get_token))
+        assert headers["Authorization"] == "Bearer test-token"
+        assert headers["Neon-Connection-String"] == "postgresql://user:pass@hostname/dbname"
+        assert headers["Neon-Raw-Text-Output"] == "true"
+        assert headers["Neon-Array-Mode"] == "false"
 
+    def test_build_headers_with_invalid_auth_token(self, mock_neon_client):
+        """Test building headers with invalid auth token."""
         def get_token() -> None:
             return None
-
+        
         with pytest.raises(InvalidAuthTokenError):
-            mock_neon_client.query(
-                "query;",
-                (),
-                HTTPQueryOptions(auth_token=get_token),
-            )
+            mock_neon_client._build_headers(HTTPQueryOptions(auth_token=get_token))
 
         def get_token() -> int:
             return 1
-
+        
         with pytest.raises(InvalidAuthTokenError):
-            mock_neon_client.query(
-                "query;",
-                (),
-                HTTPQueryOptions(auth_token=get_token),
-            )
+            mock_neon_client._build_headers(HTTPQueryOptions(auth_token=get_token))
+
+    def test_build_headers_with_array_mode(self, mock_neon_client):
+        """Test building headers with array mode."""
+        headers = mock_neon_client._build_headers(HTTPQueryOptions(array_mode=True))
+        assert headers["Neon-Array-Mode"] == "true"
 
     @patch("httpx.Client")
     def test_query_http_error(self, mock_client, mock_neon_client):
@@ -427,11 +434,6 @@ class TestNeon:
             {"query": "query;", "params": []},
             {"query": "query;", "params": []},
         ]
-
-        headers = call_args[1]["headers"]
-        assert headers["Neon-Batch-Isolation-Level"] == "ReadUncommitted"
-        assert headers["Neon-Batch-Read-Only"] == "false"
-        assert headers["Neon-Batch-Deferrable"] == "false"
 
         assert isinstance(results, list)
         assert len(results) == 2

@@ -1,7 +1,7 @@
 """Serverless client for Neon database queries over HTTP."""
 
 import os
-from typing import Any
+from typing import Any, Callable, TypeVar
 from urllib.parse import urlparse
 
 import httpx
@@ -33,6 +33,8 @@ from pyserverless.models import (
 # the type adapter for interval types uses this function to get the style
 # which by default would return b"unknown" and raise an error on conversion
 psycopg_datetime._get_intervalstyle = lambda _: b"postgres"  # noqa: SLF001
+
+T = TypeVar("T")
 
 
 class Neon:
@@ -104,7 +106,6 @@ class Neon:
     ...     ("SELECT * FROM users LIMIT 5", ()),
     ...     ("SELECT * FROM orders LIMIT 5 WHERE user_id = $1", (42,)),
     ... ], transaction_options=options)
-
     """
 
     def __init__(self, connection_string: str | None = None) -> None:
@@ -124,7 +125,6 @@ class Neon:
             If no connection string is provided and DATABASE_URL environment variable is not found.
         ConnectionStringFormattingError
             If the connection string is not in the correct format.
-
         """
         self._url, self._connection_string = self._parse_connection_string(connection_string)
         register_default_types(types)
@@ -163,25 +163,6 @@ class Neon:
             If auth token is invalid
         ParameterAdaptationError
             If parameters can't be adapted from Python types to Postgres types
-
-        Examples
-        --------
-        Simple query:
-
-        >>> results = neon.query("SELECT * FROM users WHERE id = $1", (1,))
-
-        Query with options:
-
-        >>> results = neon.query(
-        ...     "SELECT * FROM users",
-        ...     (),
-        ...     HTTPQueryOptions(
-        ...         full_results=True,
-        ...         array_mode=True,
-        ...         fetch_options={"timeout": 30.0}
-        ...     )
-        ... )
-
         """
         params = params or ()
         query_options = query_options or HTTPQueryOptions()
@@ -195,17 +176,7 @@ class Neon:
             "params": processed_params,
         }
 
-        headers: dict[str, str] = {
-            "Neon-Connection-String": self._connection_string,
-            "Neon-Raw-Text-Output": "true",
-            "Neon-Array-Mode": str(query_options.array_mode).lower(),
-        }
-
-        if query_options.auth_token is not None:
-            token = query_options.auth_token()
-            if not token or not isinstance(token, str):
-                raise InvalidAuthTokenError(token)
-            headers["Authorization"] = f"Bearer {token}"
+        headers = self._build_headers(query_options)
 
         try:
             with httpx.Client(**query_options.fetch_options) as client:
@@ -221,9 +192,7 @@ class Neon:
             raise NeonHTTPResponseError(response.status_code, response.text)
 
         json_response = response.json()
-
         json_response["rows"] = [self._convert_row(row, json_response["fields"]) for row in json_response["rows"]]
-
         results = FullQueryResults(**json_response)
 
         if query_options.result_callback:
@@ -271,20 +240,6 @@ class Neon:
             If the authentication token is invalid.
         ParameterAdaptationError
             If parameters cannot be adapted from Python types to PostgreSQL types.
-
-        Examples
-        --------
-        >>> results = neon.transaction(
-        ...     [
-        ...         ("INSERT INTO users (name) VALUES ($1)", ("John",)),
-        ...         "SELECT * FROM users",
-        ...     ],
-        ...     NeonTransactionOptions(
-        ...         isolation_level=IsolationLevel.SERIALIZABLE,
-        ...         read_only=False,
-        ...     )
-        ... )
-
         """
         transaction_options = transaction_options or NeonTransactionOptions()
 
@@ -300,20 +255,12 @@ class Neon:
         ]
         body = {"queries": processed_queries}
 
-        headers: dict[str, str] = {
-            "Neon-Connection-String": self._connection_string,
-            "Neon-Raw-Text-Output": "true",
-            "Neon-Array-Mode": str(transaction_options.array_mode).lower(),
+        headers = self._build_headers(transaction_options)
+        headers.update({
             "Neon-Batch-Isolation-Level": transaction_options.isolation_level.value,
             "Neon-Batch-Read-Only": str(transaction_options.read_only).lower(),
             "Neon-Batch-Deferrable": str(transaction_options.deferrable).lower(),
-        }
-
-        if transaction_options.auth_token is not None:
-            token = transaction_options.auth_token()
-            if not token or not isinstance(token, str):
-                raise InvalidAuthTokenError(token)
-            headers["Authorization"] = f"Bearer {token}"
+        })
 
         try:
             with httpx.Client(**transaction_options.fetch_options) as client:
@@ -337,6 +284,22 @@ class Neon:
             converted_results.append(converted_result if transaction_options.full_results else converted_result.rows)
 
         return converted_results
+
+    def _build_headers(self, options: HTTPQueryOptions) -> dict[str, str]:
+        """Build headers for HTTP request."""
+        headers: dict[str, str] = {
+            "Neon-Connection-String": self._connection_string,
+            "Neon-Raw-Text-Output": "true",
+            "Neon-Array-Mode": str(options.array_mode).lower(),
+        }
+
+        if options.auth_token is not None:
+            token = options.auth_token()
+            if not token or not isinstance(token, str):
+                raise InvalidAuthTokenError(token)
+            headers["Authorization"] = f"Bearer {token}"
+
+        return headers
 
     def _python_to_pg(self, param: Any) -> Any:
         """Convert a single Python value to its Postgres representation."""
