@@ -34,8 +34,6 @@ from pyserverless.models import (
 # which by default would return b"unknown" and raise an error on conversion
 psycopg_datetime._get_intervalstyle = lambda _: b"postgres"  # noqa: SLF001
 
-T = TypeVar("T")
-
 
 class Neon:
     """
@@ -56,13 +54,13 @@ class Neon:
     Creating a client instance using the DATABASE_URL environment variable:
 
     >>> neon = Neon()
-    >>> results = neon.query("SELECT COUNT(*) FROM users")
+    >>> results = neon.query("SELECT COUNT(*) FROM users")S
     >>> print(results[0]["count"])  # Prints the total number of users
 
     ### Using Parameterized Queries ###
 
     Parameterized queries prevent SQL injection by using placeholders:
-
+W
     >>> user_id = 42
     >>> user_data = neon.query("SELECT * FROM users WHERE id = $1", (user_id,))
     >>> print(user_data)
