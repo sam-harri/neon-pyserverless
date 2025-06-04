@@ -60,7 +60,7 @@ class Neon:
     ### Using Parameterized Queries ###
 
     Parameterized queries prevent SQL injection by using placeholders:
-W
+
     >>> user_id = 42
     >>> user_data = neon.query("SELECT * FROM users WHERE id = $1", (user_id,))
     >>> print(user_data)
@@ -169,7 +169,7 @@ W
         query_options = query_options or HTTPQueryOptions()
 
         processed_params = [self._python_to_pg(p) for p in params]
-        if query_options.query_callback:
+        if query_options.query_callback is not None:
             query_options.query_callback(query, processed_params)
 
         body = {
@@ -196,7 +196,7 @@ W
         json_response["rows"] = [self._convert_row(row, json_response["fields"]) for row in json_response["rows"]]
         results = FullQueryResults(**json_response)
 
-        if query_options.result_callback:
+        if query_options.result_callback is not None:
             query_options.result_callback(
                 query,
                 processed_params,
