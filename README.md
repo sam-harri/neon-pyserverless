@@ -2,38 +2,42 @@
 
 A lightweight, serverless client for executing queries against a Neon database over HTTP. This package simplifies querying your Neon PostgreSQL database from Python without managing a persistent connection.
 
+This package provides both synchronous (`Neon`) and asynchronous (`NeonAsync`) clients. The API is identical for both clients, with the async client requiring `await` for all method calls. All examples below use the async client.
+
 # Usage
 
 ## Initialize the client
 
 Either pass in a connection string
 ```python
-from pyserverless import Neon
+from pyserverless import NeonAsync
+// or using the sync client
+// from pyserverless import Neon
 
-neon = Neon("postgresql://neondb_owner:password@host/neondb?sslmode=require")
+neon = NeonAsync("postgresql://neondb_owner:password@host/neondb?sslmode=require")
 ```
 
 or if the `DATABASE_URL` environment variable is set:
 
 ```python
-neon = Neon()
+neon = NeonAsync()
 ```
 
 ## Execute a query
 
 Without any parameters:
 ```python
-results = neon.query("SELECT * FROM users")
+results = await neon.query("SELECT * FROM users")
 ```
 
 With parameters:
 ```python
-results = neon.query("SELECT * FROM users WHERE id = $1", (1,))
+results = await neon.query("SELECT * FROM users WHERE id = $1", (1,))
 ```
 
 And with options:
 ```python
-results = neon.query(
+results = await neon.query(
     "SELECT * FROM users",
     (),
     HTTPQueryOptions(
@@ -48,7 +52,7 @@ results = neon.query(
 
 Without any options:
 ```python
-results = neon.transaction(
+results = await neon.transaction(
     [
         ("INSERT INTO users (name) VALUES ($1)", ("John",)),
         ("SELECT * FROM users"),
@@ -58,7 +62,7 @@ results = neon.transaction(
 
 With options:
 ```python
-results = neon.transaction(
+results = await neon.transaction(
     [
         ("SELECT questions, answers FROM questions_and_answers WHERE topic = $1", ("SQL",)),
         ("SELECT topic, COUNT(*) FROM questions_and_answers GROUP BY topic"),
@@ -80,7 +84,7 @@ def query_callback(query: str, params: list[Any]) -> None:
 def result_callback(query: str, params: list[Any], results: FullQueryResults | QueryRows, array_mode: bool, full_results: bool):
     logger.info(f"Query {query} executed with {results.rowCount} rows, array_mode: {array_mode}, full_results: {full_results}")
 
-results = neon.query(
+results = await neon.query(
     "SELECT * FROM users",
     (),
     HTTPQueryOptions(
@@ -93,12 +97,14 @@ results = neon.query(
 ## Custom Type Conversion
 
 Under the hood, the client uses psycopg to convert Python types to Postgres types and vice versa. 
-For now, it is possible to modify the Neon.transformer object and register custom adapters.
+For now, it is possible to modify the Neon.transformer or NeonAsync.transformer object and register custom adapters.
 A cleaner and more supported way to do this will be added in the future.
 
 # API Reference
 
-### `Neon(connection_string: str | None = None)`
+The package provides two clients: `Neon` (synchronous) and `NeonAsync` (asynchronous). Both clients have identical APIs, with the async client requiring `await` for method calls.
+
+### `Neon(connection_string: str | None = None)` / `NeonAsync(connection_string: str | None = None)`
 
 - **Parameters:**
   - `connection_string`: A PostgreSQL connection string in the format `postgresql://user:pass@hostname/dbname`. If omitted, the client looks for the `DATABASE_URL` environment variable.
@@ -119,6 +125,7 @@ A cleaner and more supported way to do this will be added in the future.
   - `InvalidAuthTokenError`: If the auth token callback returns an invalid value.
   - `PostgresAdaptationError`: If a parameter cannot be adapted to a PostgreSQL type.
   - `PythonAdaptationError`: If a PostgreSQL value cannot be converted to a Python type.
+- **Note:** For `NeonAsync`, this method is `async` and must be awaited.
 
 ### `transaction(queries: list[tuple[str, tuple[Any, ...]] | str], transaction_options: NeonTransactionOptions = None) -> list[FullQueryResults] | list[QueryRows]`
 
@@ -132,6 +139,7 @@ A cleaner and more supported way to do this will be added in the future.
   - `InvalidAuthTokenError`: If the auth token callback returns an invalid value.
   - `PostgresAdaptationError`: If a parameter cannot be adapted to a PostgreSQL type.
   - `PythonAdaptationError`: If a PostgreSQL value cannot be converted to a Python type.
+- **Note:** For `NeonAsync`, this method is `async` and must be awaited.
 
 ## Errors
 

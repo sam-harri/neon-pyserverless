@@ -64,19 +64,12 @@ from pyserverless.models import (
     IsolationLevel,
     NeonTransactionOptions,
 )
-from pyserverless.neon import Neon
+from pyserverless.neon import Neon, NeonAsync
 
 __all__ = [
     "HTTPQueryOptions",
     "IsolationLevel",
     "Neon",
-    "NeonTransactionOptions",
-]
-
-
-__all__ = [
-    "HTTPQueryOptions",
-    "IsolationLevel",
-    "Neon",
+    "NeonAsync",
     "NeonTransactionOptions",
 ]

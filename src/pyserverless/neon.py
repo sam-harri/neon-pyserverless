@@ -1,7 +1,7 @@
 """Serverless client for Neon database queries over HTTP."""
 
 import os
-from typing import Any, TypeVar
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -35,81 +35,17 @@ from pyserverless.models import (
 psycopg_datetime._get_intervalstyle = lambda _: b"postgres"  # noqa: SLF001
 
 
-class Neon:
+class _NeonBase:
     """
-    Sync client for executing queries against a Neon database over HTTP.
+    Base class for Neon database clients.
 
-    Examples
-    --------
-    Creating a client instance using an explicit connection string:
-
-    >>> neon = Neon("postgresql://user:pass@hostname/dbname")
-
-    ### Executing a simple query: ###
-
-    >>> results = neon.query("SELECT * FROM users")
-    >>> for row in results:
-    ...     print(row)
-
-    Creating a client instance using the DATABASE_URL environment variable:
-
-    >>> neon = Neon()
-    >>> results = neon.query("SELECT COUNT(*) FROM users")S
-    >>> print(results[0]["count"])  # Prints the total number of users
-
-    ### Using Parameterized Queries ###
-
-    Parameterized queries prevent SQL injection by using placeholders:
-
-    >>> user_id = 42
-    >>> user_data = neon.query("SELECT * FROM users WHERE id = $1", (user_id,))
-    >>> print(user_data)
-
-    Inserting new data with parameters:
-
-    >>> neon.query(
-    ...     "INSERT INTO users (name, email) VALUES ($1, $2)",
-    ...     ("Alice", "alice@example.com"),
-    ... )
-
-    ### Executing Multiple Queries in a Transaction ###
-
-    Transactions allow executing multiple queries atomically:
-
-    >>> transaction_results = neon.transaction([
-    ...     ("INSERT INTO orders (user_id, total) VALUES ($1, $2)", (42, 99.99)),
-    ...     ("UPDATE users SET last_order = NOW() WHERE id = $1", (42,)),
-    ...     "SELECT * FROM users WHERE id = 42"
-    ... ])
-
-    >>> print(transaction_results[2])  # Prints the user data after the update
-
-    ### Customizing Query Execution with Options ###
-
-    Using `HTTPQueryOptions` to retrieve full query metadata:
-
-    >>> from pyserverless.models import HTTPQueryOptions
-    >>> options = HTTPQueryOptions(full_results=True)
-    >>> results = neon.query("SELECT * FROM users LIMIT 5", query_options=options)
-    >>> print(results.fields)  # Print column metadata
-
-    or when using transactions:
-
-    >>> options = NeonTransactionOptions(
-    ...     read_only=True,
-    ...     isolation_level=IsolationLevel.SERIALIZABLE,
-    ...     deferrable=True,
-    ... )
-    >>> results = neon.transaction([
-    ...     ("SELECT * FROM users LIMIT 5", ()),
-    ...     ("SELECT * FROM orders LIMIT 5 WHERE user_id = $1", (42,)),
-    ... ], transaction_options=options)
-
+    Contains shared logic for connection string parsing, parameter conversion,
+    result conversion, and response processing.
     """
 
     def __init__(self, connection_string: str | None = None) -> None:
         """
-        Initialize the Neon client.
+        Initialize the Neon client base.
 
         Parameters
         ----------
@@ -130,164 +66,6 @@ class Neon:
         register_default_types(types)
         self._transformer = Transformer()
         register_default_adapters(self._transformer)
-
-    def query(
-        self,
-        query: str,
-        params: tuple[Any, ...] | None = None,
-        query_options: HTTPQueryOptions | None = None,
-    ) -> FullQueryResults | QueryRows:
-        """
-        Execute a single SQL query against the database.
-
-        Parameters
-        ----------
-        query : str
-            The SQL query to execute, using $1, $2, etc., for parameters.
-        params : tuple[Any, ...] | None, optional
-            Tuple of parameters to substitute into the query.
-        query_options : HTTPQueryOptions | None, optional
-            Query options.
-
-        Returns
-        -------
-        FullQueryResults | QueryRows
-            Either FullQueryResults (if full_results=True) or QueryRows
-            (if full_results=False).
-
-        Raises
-        ------
-        NeonHTTPResponseError
-            If the HTTP request fails
-        InvalidAuthTokenError
-            If auth token is invalid
-        ParameterAdaptationError
-            If parameters can't be adapted from Python types to Postgres types
-
-        """
-        params = params or ()
-        query_options = query_options or HTTPQueryOptions()
-
-        processed_params = [self._python_to_pg(p) for p in params]
-        if query_options.query_callback is not None:
-            query_options.query_callback(query, processed_params)
-
-        body = {
-            "query": query,
-            "params": processed_params,
-        }
-
-        headers = self._build_headers(query_options)
-
-        try:
-            with httpx.Client(**query_options.fetch_options) as client:
-                response = client.post(
-                    self._url,
-                    json=body,
-                    headers=headers,
-                )
-        except httpx.RequestError as e:
-            raise NeonHTTPClientError from e
-
-        if response.status_code != httpx.codes.OK:
-            raise NeonHTTPResponseError(response.status_code, response.text)
-
-        json_response = response.json()
-        json_response["rows"] = [self._convert_row(row, json_response["fields"]) for row in json_response["rows"]]
-        results = FullQueryResults(**json_response)
-
-        if query_options.result_callback is not None:
-            query_options.result_callback(
-                query,
-                processed_params,
-                results,
-                query_options.array_mode,
-                query_options.full_results,
-            )
-
-        if query_options.full_results:
-            return results
-        return results.rows
-
-    def transaction(
-        self,
-        queries: list[tuple[str, tuple[Any, ...]] | str],
-        transaction_options: NeonTransactionOptions | None = None,
-    ) -> list[FullQueryResults] | list[QueryRows]:
-        """
-        Execute multiple queries in a transaction.
-
-        Parameters
-        ----------
-        queries : list[tuple[str, tuple[Any, ...]] | str]
-            A list of queries to execute in sequence. Each element can either be:
-            - A tuple (query, params), where params is a tuple of values to substitute
-                into the query.
-            - A plain query string (equivalent to (query, ())), if no parameters are needed.
-        transaction_options : NeonTransactionOptions, optional
-            transaction options.
-
-        Returns
-        -------
-        list[FullQueryResults] | list[QueryRows]
-            A list of results, one for each query. If the `full_results` flag in the options is True,
-            each result is a FullQueryResults object; otherwise, it is a list of query rows.
-
-        Raises
-        ------
-        NeonHTTPResponseError
-            If the HTTP request fails.
-        InvalidAuthTokenError
-            If the authentication token is invalid.
-        ParameterAdaptationError
-            If parameters cannot be adapted from Python types to PostgreSQL types.
-
-        """
-        transaction_options = transaction_options or NeonTransactionOptions()
-
-        # Unparameterized queries are strings, so wrap them as (query, ()).
-        queries = [(item, ()) if isinstance(item, str) else item for item in queries]
-
-        processed_queries = [
-            {
-                "query": query,
-                "params": [self._python_to_pg(p) for p in params],
-            }
-            for query, params in queries
-        ]
-        body = {"queries": processed_queries}
-
-        headers = self._build_headers(transaction_options)
-        headers.update(
-            {
-                "Neon-Batch-Isolation-Level": transaction_options.isolation_level.value,
-                "Neon-Batch-Read-Only": str(transaction_options.read_only).lower(),
-                "Neon-Batch-Deferrable": str(transaction_options.deferrable).lower(),
-            }
-        )
-
-        try:
-            with httpx.Client(**transaction_options.fetch_options) as client:
-                response = client.post(
-                    self._url,
-                    json=body,
-                    headers=headers,
-                )
-        except httpx.RequestError as e:
-            raise NeonHTTPClientError from e
-
-        if response.status_code != httpx.codes.OK:
-            raise NeonHTTPResponseError(response.status_code, response.text)
-
-        results = response.json()["results"]
-        converted_results = []
-
-        for result in results:
-            result["rows"] = [self._convert_row(row, result["fields"]) for row in result["rows"]]
-            converted_result = FullQueryResults(**result)
-            converted_results.append(converted_result if transaction_options.full_results else converted_result.rows)
-
-        return converted_results
 
     def _build_headers(self, options: HTTPQueryOptions) -> dict[str, str]:
         """Build headers for HTTP request."""
@@ -374,3 +152,504 @@ class Neon:
 
         api_url = f"https://{parsed.hostname}/sql"
         return api_url, connection_string
+
+    def _process_query_response(
+        self,
+        json_response: dict[str, Any],
+        query: str,
+        processed_params: list[Any],
+        query_options: HTTPQueryOptions,
+    ) -> FullQueryResults | QueryRows:
+        """Process query response and convert rows to Python types."""
+        json_response["rows"] = [self._convert_row(row, json_response["fields"]) for row in json_response["rows"]]
+        results = FullQueryResults(**json_response)
+
+        if query_options.result_callback is not None:
+            query_options.result_callback(
+                query,
+                processed_params,
+                results,
+                query_options.array_mode,
+                query_options.full_results,
+            )
+
+        if query_options.full_results:
+            return results
+        return results.rows
+
+    def _process_transaction_response(
+        self,
+        results: list[dict[str, Any]],
+        transaction_options: NeonTransactionOptions,
+    ) -> list[FullQueryResults] | list[QueryRows]:
+        """Process transaction response and convert rows to Python types."""
+        converted_results = []
+
+        for result in results:
+            result["rows"] = [self._convert_row(row, result["fields"]) for row in result["rows"]]
+            converted_result = FullQueryResults(**result)
+            converted_results.append(converted_result if transaction_options.full_results else converted_result.rows)
+
+        return converted_results
+
+
+class Neon(_NeonBase):
+    """
+    Sync client for executing queries against a Neon database over HTTP.
+
+    Examples
+    --------
+    Creating a client instance using an explicit connection string:
+
+    >>> neon = Neon("postgresql://user:pass@hostname/dbname")
+
+    ### Executing a simple query: ###
+
+    >>> results = neon.query("SELECT * FROM users")
+    >>> for row in results:
+    ...     print(row)
+
+    Creating a client instance using the DATABASE_URL environment variable:
+
+    >>> neon = Neon()
+    >>> results = neon.query("SELECT COUNT(*) FROM users")
+    >>> print(results[0]["count"])  # Prints the total number of users
+
+    ### Using Parameterized Queries ###
+
+    Parameterized queries prevent SQL injection by using placeholders:
+
+    >>> user_id = 42
+    >>> user_data = neon.query("SELECT * FROM users WHERE id = $1", (user_id,))
+    >>> print(user_data)
+
+    Inserting new data with parameters:
+
+    >>> neon.query(
+    ...     "INSERT INTO users (name, email) VALUES ($1, $2)",
+    ...     ("Alice", "alice@example.com"),
+    ... )
+
+    ### Executing Multiple Queries in a Transaction ###
+
+    Transactions allow executing multiple queries atomically:
+
+    >>> transaction_results = neon.transaction([
+    ...     ("INSERT INTO orders (user_id, total) VALUES ($1, $2)", (42, 99.99)),
+    ...     ("UPDATE users SET last_order = NOW() WHERE id = $1", (42,)),
+    ...     "SELECT * FROM users WHERE id = 42"
+    ... ])
+
+    >>> print(transaction_results[2])  # Prints the user data after the update
+
+    ### Customizing Query Execution with Options ###
+
+    Using `HTTPQueryOptions` to retrieve full query metadata:
+
+    >>> from pyserverless.models import HTTPQueryOptions
+    >>> options = HTTPQueryOptions(full_results=True)
+    >>> results = neon.query("SELECT * FROM users LIMIT 5", query_options=options)
+    >>> print(results.fields)  # Print column metadata
+
+    or when using transactions:
+
+    >>> options = NeonTransactionOptions(
+    ...     read_only=True,
+    ...     isolation_level=IsolationLevel.SERIALIZABLE,
+    ...     deferrable=True,
+    ... )
+    >>> results = neon.transaction([
+    ...     ("SELECT * FROM users LIMIT 5", ()),
+    ...     ("SELECT * FROM orders LIMIT 5 WHERE user_id = $1", (42,)),
+    ... ], transaction_options=options)
+
+    """
+
+    def __init__(self, connection_string: str | None = None) -> None:
+        """
+        Initialize the Neon client.
+
+        Parameters
+        ----------
+        connection_string : str, optional
+            A PostgreSQL connection string in the format
+            `postgresql://user:pass@hostname/dbname`. If not provided,
+            will look for DATABASE_URL environment variable.
+
+        Raises
+        ------
+        ConnectionStringMissingError
+            If no connection string is provided and DATABASE_URL environment variable is not found.
+        ConnectionStringFormattingError
+            If the connection string is not in the correct format.
+
+        """
+        super().__init__(connection_string)
+
+    def query(
+        self,
+        query: str,
+        params: tuple[Any, ...] | None = None,
+        query_options: HTTPQueryOptions | None = None,
+    ) -> FullQueryResults | QueryRows:
+        """
+        Execute a single SQL query against the database.
+
+        Parameters
+        ----------
+        query : str
+            The SQL query to execute, using $1, $2, etc., for parameters.
+        params : tuple[Any, ...] | None, optional
+            Tuple of parameters to substitute into the query.
+        query_options : HTTPQueryOptions | None, optional
+            Query options.
+
+        Returns
+        -------
+        FullQueryResults | QueryRows
+            Either FullQueryResults (if full_results=True) or QueryRows
+            (if full_results=False).
+
+        Raises
+        ------
+        NeonHTTPResponseError
+            If the HTTP request fails
+        InvalidAuthTokenError
+            If auth token is invalid
+        ParameterAdaptationError
+            If parameters can't be adapted from Python types to Postgres types
+
+        """
+        params = params or ()
+        query_options = query_options or HTTPQueryOptions()
+
+        processed_params = [self._python_to_pg(p) for p in params]
+        if query_options.query_callback is not None:
+            query_options.query_callback(query, processed_params)
+
+        body = {
+            "query": query,
+            "params": processed_params,
+        }
+
+        headers = self._build_headers(query_options)
+
+        try:
+            with httpx.Client(**query_options.fetch_options) as client:
+                response = client.post(
+                    self._url,
+                    json=body,
+                    headers=headers,
+                )
+        except httpx.RequestError as e:
+            raise NeonHTTPClientError from e
+
+        if response.status_code != httpx.codes.OK:
+            raise NeonHTTPResponseError(response.status_code, response.text)
+
+        json_response = response.json()
+        return self._process_query_response(json_response, query, processed_params, query_options)
+
+    def transaction(
+        self,
+        queries: list[tuple[str, tuple[Any, ...]] | str],
+        transaction_options: NeonTransactionOptions | None = None,
+    ) -> list[FullQueryResults] | list[QueryRows]:
+        """
+        Execute multiple queries in a transaction.
+
+        Parameters
+        ----------
+        queries : list[tuple[str, tuple[Any, ...]] | str]
+            A list of queries to execute in sequence. Each element can either be:
+            - A tuple (query, params), where params is a tuple of values to substitute
+                into the query.
+            - A plain query string (equivalent to (query, ())), if no parameters are needed.
+        transaction_options : NeonTransactionOptions, optional
+            transaction options.
+
+        Returns
+        -------
+        list[FullQueryResults] | list[QueryRows]
+            A list of results, one for each query. If the `full_results` flag in the options is True,
+            each result is a FullQueryResults object; otherwise, it is a list of query rows.
+
+        Raises
+        ------
+        NeonHTTPResponseError
+            If the HTTP request fails.
+        InvalidAuthTokenError
+            If the authentication token is invalid.
+        ParameterAdaptationError
+            If parameters cannot be adapted from Python types to PostgreSQL types.
+
+        """
+        transaction_options = transaction_options or NeonTransactionOptions()
+
+        # Unparameterized queries are strings, so wrap them as (query, ()).
+        queries = [(item, ()) if isinstance(item, str) else item for item in queries]
+
+        processed_queries = [
+            {
+                "query": query,
+                "params": [self._python_to_pg(p) for p in params],
+            }
+            for query, params in queries
+        ]
+        body = {"queries": processed_queries}
+
+        headers = self._build_headers(transaction_options)
+        headers.update(
+            {
+                "Neon-Batch-Isolation-Level": transaction_options.isolation_level.value,
+                "Neon-Batch-Read-Only": str(transaction_options.read_only).lower(),
+                "Neon-Batch-Deferrable": str(transaction_options.deferrable).lower(),
+            }
+        )
+
+        try:
+            with httpx.Client(**transaction_options.fetch_options) as client:
+                response = client.post(
+                    self._url,
+                    json=body,
+                    headers=headers,
+                )
+        except httpx.RequestError as e:
+            raise NeonHTTPClientError from e
+
+        if response.status_code != httpx.codes.OK:
+            raise NeonHTTPResponseError(response.status_code, response.text)
+
+        results = response.json()["results"]
+        return self._process_transaction_response(results, transaction_options)
+
+
+class NeonAsync(_NeonBase):
+    """
+    Async client for executing queries against a Neon database over HTTP.
+
+    Examples
+    --------
+    Creating a client instance using an explicit connection string:
+
+    >>> neon = NeonAsync("postgresql://user:pass@hostname/dbname")
+
+    ### Executing a simple query: ###
+
+    >>> results = await neon.query("SELECT * FROM users")
+    >>> for row in results:
+    ...     print(row)
+
+    Creating a client instance using the DATABASE_URL environment variable:
+
+    >>> neon = NeonAsync()
+    >>> results = await neon.query("SELECT COUNT(*) FROM users")
+    >>> print(results[0]["count"])  # Prints the total number of users
+
+    ### Using Parameterized Queries ###
+
+    Parameterized queries prevent SQL injection by using placeholders:
+
+    >>> user_id = 42
+    >>> user_data = await neon.query("SELECT * FROM users WHERE id = $1", (user_id,))
+    >>> print(user_data)
+
+    Inserting new data with parameters:
+
+    >>> await neon.query(
+    ...     "INSERT INTO users (name, email) VALUES ($1, $2)",
+    ...     ("Alice", "alice@example.com"),
+    ... )
+
+    ### Executing Multiple Queries in a Transaction ###
+
+    Transactions allow executing multiple queries atomically:
+
+    >>> transaction_results = await neon.transaction([
+    ...     ("INSERT INTO orders (user_id, total) VALUES ($1, $2)", (42, 99.99)),
+    ...     ("UPDATE users SET last_order = NOW() WHERE id = $1", (42,)),
+    ...     "SELECT * FROM users WHERE id = 42"
+    ... ])
+
+    >>> print(transaction_results[2])  # Prints the user data after the update
+
+    ### Customizing Query Execution with Options ###
+
+    Using `HTTPQueryOptions` to retrieve full query metadata:
+
+    >>> from pyserverless.models import HTTPQueryOptions
+    >>> options = HTTPQueryOptions(full_results=True)
+    >>> results = await neon.query("SELECT * FROM users LIMIT 5", query_options=options)
+    >>> print(results.fields)  # Print column metadata
+
+    or when using transactions:
+
+    >>> options = NeonTransactionOptions(
+    ...     read_only=True,
+    ...     isolation_level=IsolationLevel.SERIALIZABLE,
+    ...     deferrable=True,
+    ... )
+    >>> results = await neon.transaction([
+    ...     ("SELECT * FROM users LIMIT 5", ()),
+    ...     ("SELECT * FROM orders LIMIT 5 WHERE user_id = $1", (42,)),
+    ... ], transaction_options=options)
+
+    """
+
+    def __init__(self, connection_string: str | None = None) -> None:
+        """
+        Initialize the Neon async client.
+
+        Parameters
+        ----------
+        connection_string : str, optional
+            A PostgreSQL connection string in the format
+            `postgresql://user:pass@hostname/dbname`. If not provided,
+            will look for DATABASE_URL environment variable.
+
+        Raises
+        ------
+        ConnectionStringMissingError
+            If no connection string is provided and DATABASE_URL environment variable is not found.
+        ConnectionStringFormattingError
+            If the connection string is not in the correct format.
+
+        """
+        super().__init__(connection_string)
+
+    async def query(
+        self,
+        query: str,
+        params: tuple[Any, ...] | None = None,
+        query_options: HTTPQueryOptions | None = None,
+    ) -> FullQueryResults | QueryRows:
+        """
+        Execute a single SQL query against the database.
+
+        Parameters
+        ----------
+        query : str
+            The SQL query to execute, using $1, $2, etc., for parameters.
+        params : tuple[Any, ...] | None, optional
+            Tuple of parameters to substitute into the query.
+        query_options : HTTPQueryOptions | None, optional
+            Query options.
+
+        Returns
+        -------
+        FullQueryResults | QueryRows
+            Either FullQueryResults (if full_results=True) or QueryRows
+            (if full_results=False).
+
+        Raises
+        ------
+        NeonHTTPResponseError
+            If the HTTP request fails
+        InvalidAuthTokenError
+            If auth token is invalid
+        ParameterAdaptationError
+            If parameters can't be adapted from Python types to Postgres types
+
+        """
+        params = params or ()
+        query_options = query_options or HTTPQueryOptions()
+
+        processed_params = [self._python_to_pg(p) for p in params]
+        if query_options.query_callback is not None:
+            query_options.query_callback(query, processed_params)
+
+        body = {
+            "query": query,
+            "params": processed_params,
+        }
+
+        headers = self._build_headers(query_options)
+
+        try:
+            async with httpx.AsyncClient(**query_options.fetch_options) as client:
+                response = await client.post(
+                    self._url,
+                    json=body,
+                    headers=headers,
+                )
+        except httpx.RequestError as e:
+            raise NeonHTTPClientError from e
+
+        if response.status_code != httpx.codes.OK:
+            raise NeonHTTPResponseError(response.status_code, response.text)
+
+        json_response = response.json()
+        return self._process_query_response(json_response, query, processed_params, query_options)
+
+    async def transaction(
+        self,
+        queries: list[tuple[str, tuple[Any, ...]] | str],
+        transaction_options: NeonTransactionOptions | None = None,
+    ) -> list[FullQueryResults] | list[QueryRows]:
+        """
+        Execute multiple queries in a transaction.
+
+        Parameters
+        ----------
+        queries : list[tuple[str, tuple[Any, ...]] | str]
+            A list of queries to execute in sequence. Each element can either be:
+            - A tuple (query, params), where params is a tuple of values to substitute
+                into the query.
+            - A plain query string (equivalent to (query, ())), if no parameters are needed.
+        transaction_options : NeonTransactionOptions, optional
+            transaction options.
+
+        Returns
+        -------
+        list[FullQueryResults] | list[QueryRows]
+            A list of results, one for each query. If the `full_results` flag in the options is True,
+            each result is a FullQueryResults object; otherwise, it is a list of query rows.
+
+        Raises
+        ------
+        NeonHTTPResponseError
+            If the HTTP request fails.
+        InvalidAuthTokenError
+            If the authentication token is invalid.
+        ParameterAdaptationError
+            If parameters cannot be adapted from Python types to PostgreSQL types.
+
+        """
+        transaction_options = transaction_options or NeonTransactionOptions()
+
+        # Unparameterized queries are strings, so wrap them as (query, ()).
+        queries = [(item, ()) if isinstance(item, str) else item for item in queries]
+
+        processed_queries = [
+            {
+                "query": query,
+                "params": [self._python_to_pg(p) for p in params],
+            }
+            for query, params in queries
+        ]
+        body = {"queries": processed_queries}
+
+        headers = self._build_headers(transaction_options)
+        headers.update(
+            {
+                "Neon-Batch-Isolation-Level": transaction_options.isolation_level.value,
+                "Neon-Batch-Read-Only": str(transaction_options.read_only).lower(),
+                "Neon-Batch-Deferrable": str(transaction_options.deferrable).lower(),
+            }
+        )
+
+        try:
+            async with httpx.AsyncClient(**transaction_options.fetch_options) as client:
+                response = await client.post(
+                    self._url,
+                    json=body,
+                    headers=headers,
+                )
+        except httpx.RequestError as e:
+            raise NeonHTTPClientError from e
+
+        if response.status_code != httpx.codes.OK:
+            raise NeonHTTPResponseError(response.status_code, response.text)
+
+        results = response.json()["results"]
+        return self._process_transaction_response(results, transaction_options)

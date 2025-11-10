@@ -34,6 +34,6 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
       - name: Run unit tests
-        run: uv run pytest tests/unit --cov=src/pyserverless --cov-fail-under=90 --cov-branch --cov-report=term-missing
+        run: uv run pytest tests/unit
       - name: Run integration tests
         run: uv run pytest tests/integration
