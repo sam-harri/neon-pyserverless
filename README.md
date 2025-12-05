@@ -11,8 +11,8 @@ This package provides both synchronous (`Neon`) and asynchronous (`NeonAsync`) c
 Either pass in a connection string
 ```python
 from pyserverless import NeonAsync
-// or using the sync client
-// from pyserverless import Neon
+# or using the sync client
+# from pyserverless import Neon
 
 neon = NeonAsync("postgresql://neondb_owner:password@host/neondb?sslmode=require")
 ```
